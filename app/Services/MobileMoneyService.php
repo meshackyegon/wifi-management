@@ -1,0 +1,359 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\MobileMoneyPayment;
+use App\Models\VoucherPlan;
+use App\Models\Voucher;
+use App\Models\User;
+use GuzzleHttp\Client;
+use Illuminate\Support\Facades\Log;
+
+class MobileMoneyService
+{
+    protected $client;
+    protected $voucherService;
+    protected $smsService;
+
+    public function __construct(VoucherService $voucherService, SmsService $smsService)
+    {
+        $this->client = new Client();
+        $this->voucherService = $voucherService;
+        $this->smsService = $smsService;
+    }
+
+    /**
+     * Initiate mobile money payment
+     */
+    public function initiatePayment(VoucherPlan $plan, string $phoneNumber, string $provider)
+    {
+        $payment = new MobileMoneyPayment();
+        $payment->generateTransactionId();
+        $payment->voucher_plan_id = $plan->id;
+        $payment->phone_number = $phoneNumber;
+        $payment->amount = $plan->price;
+        $payment->commission = $plan->price * 0.03; // 3% commission
+        $payment->provider = $provider;
+        $payment->status = 'pending';
+        $payment->save();
+
+        try {
+            $response = $this->sendPaymentRequest($payment);
+            
+            if ($response['success']) {
+                $payment->external_transaction_id = $response['transaction_id'] ?? null;
+                $payment->reference_number = $response['reference'] ?? null;
+                $payment->save();
+
+                return [
+                    'success' => true,
+                    'payment_id' => $payment->id,
+                    'transaction_id' => $payment->transaction_id,
+                    'message' => 'Payment initiated successfully. Please complete payment on your phone.',
+                    'reference' => $payment->reference_number,
+                ];
+            } else {
+                $payment->markAsFailed($response['message'] ?? 'Payment initiation failed');
+                return [
+                    'success' => false,
+                    'message' => $response['message'] ?? 'Payment failed',
+                ];
+            }
+        } catch (\Exception $e) {
+            Log::error('Mobile Money Payment Error', [
+                'payment_id' => $payment->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            $payment->markAsFailed($e->getMessage());
+
+            return [
+                'success' => false,
+                'message' => 'Payment service temporarily unavailable',
+            ];
+        }
+    }
+
+    /**
+     * Send payment request to mobile money provider
+     */
+    protected function sendPaymentRequest(MobileMoneyPayment $payment)
+    {
+        $config = $this->getProviderConfig($payment->provider);
+        
+        if (!$config) {
+            throw new \Exception('Provider configuration not found');
+        }
+
+        $payload = $this->buildPaymentPayload($payment, $config);
+        
+        try {
+            $response = $this->client->post($config['endpoint'], [
+                'headers' => $config['headers'],
+                'json' => $payload,
+                'timeout' => 30,
+            ]);
+
+            $data = json_decode($response->getBody()->getContents(), true);
+            
+            return $this->parseProviderResponse($data, $payment->provider);
+        } catch (\Exception $e) {
+            throw new \Exception('Failed to connect to payment provider: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Build payment payload for different providers
+     */
+    protected function buildPaymentPayload(MobileMoneyPayment $payment, array $config)
+    {
+        $basePayload = [
+            'amount' => $payment->amount,
+            'phone_number' => $payment->phone_number,
+            'reference' => $payment->transaction_id,
+            'description' => "WiFi Voucher - {$payment->voucherPlan->name}",
+        ];
+
+        return match($payment->provider) {
+            'mtn_mobile_money' => $this->buildMTNPayload($basePayload, $config),
+            'airtel_money' => $this->buildAirtelPayload($basePayload, $config),
+            'safaricom_mpesa' => $this->buildSafaricomPayload($basePayload, $config),
+            'vodacom_mpesa' => $this->buildVodacomPayload($basePayload, $config),
+            'tigo_pesa' => $this->buildTigoPesaPayload($basePayload, $config),
+            default => $basePayload,
+        };
+    }
+
+    /**
+     * Handle payment callback
+     */
+    public function handleCallback(string $provider, array $data)
+    {
+        Log::info('Mobile Money Callback', [
+            'provider' => $provider,
+            'data' => $data,
+        ]);
+
+        $payment = $this->findPaymentFromCallback($provider, $data);
+        
+        if (!$payment) {
+            Log::warning('Payment not found for callback', [
+                'provider' => $provider,
+                'data' => $data,
+            ]);
+            return false;
+        }
+
+        $status = $this->parseCallbackStatus($provider, $data);
+        
+        if ($status === 'success') {
+            return $this->processSuccessfulPayment($payment, $data);
+        } elseif ($status === 'failed') {
+            $payment->markAsFailed($data['message'] ?? 'Payment failed');
+        }
+
+        return true;
+    }
+
+    /**
+     * Process successful payment
+     */
+    protected function processSuccessfulPayment(MobileMoneyPayment $payment, array $callbackData)
+    {
+        try {
+            // Mark payment as successful
+            $payment->markAsSuccessful(
+                $callbackData['external_transaction_id'] ?? null,
+                $callbackData
+            );
+
+            // Generate voucher
+            $vouchers = $this->voucherService->generateVouchers(
+                $payment->voucherPlan,
+                1,
+                null,
+                null
+            );
+
+            $voucher = $vouchers[0];
+            $payment->voucher_id = $voucher->id;
+            $payment->save();
+
+            // Send SMS with voucher code
+            $this->smsService->sendVoucherSMS($payment->phone_number, $voucher);
+
+            Log::info('Payment processed successfully', [
+                'payment_id' => $payment->id,
+                'voucher_code' => $voucher->code,
+            ]);
+
+            return true;
+        } catch (\Exception $e) {
+            Log::error('Error processing successful payment', [
+                'payment_id' => $payment->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
+
+    /**
+     * Get provider configuration
+     */
+    protected function getProviderConfig(string $provider)
+    {
+        $configs = [
+            'mtn_mobile_money' => [
+                'endpoint' => config('services.mtn.endpoint'),
+                'headers' => [
+                    'Authorization' => 'Bearer ' . config('services.mtn.api_key'),
+                    'Content-Type' => 'application/json',
+                ],
+            ],
+            'airtel_money' => [
+                'endpoint' => config('services.airtel.endpoint'),
+                'headers' => [
+                    'Authorization' => 'Bearer ' . config('services.airtel.api_key'),
+                    'Content-Type' => 'application/json',
+                ],
+            ],
+            'safaricom_mpesa' => [
+                'endpoint' => config('services.safaricom.endpoint'),
+                'headers' => [
+                    'Authorization' => 'Bearer ' . config('services.safaricom.access_token'),
+                    'Content-Type' => 'application/json',
+                ],
+            ],
+            // Add other providers...
+        ];
+
+        return $configs[$provider] ?? null;
+    }
+
+    /**
+     * Provider-specific payload builders
+     */
+    protected function buildMTNPayload(array $base, array $config)
+    {
+        return [
+            'amount' => (string) $base['amount'],
+            'currency' => 'UGX', // or other currency
+            'externalId' => $base['reference'],
+            'payer' => [
+                'partyIdType' => 'MSISDN',
+                'partyId' => $base['phone_number'],
+            ],
+            'payerMessage' => $base['description'],
+            'payeeNote' => $base['description'],
+        ];
+    }
+
+    protected function buildAirtelPayload(array $base, array $config)
+    {
+        return [
+            'reference' => $base['reference'],
+            'subscriber' => [
+                'country' => 'UG', // or other country
+                'currency' => 'UGX',
+                'msisdn' => $base['phone_number'],
+            ],
+            'transaction' => [
+                'amount' => $base['amount'],
+                'country' => 'UG',
+                'currency' => 'UGX',
+                'id' => $base['reference'],
+            ],
+        ];
+    }
+
+    protected function buildSafaricomPayload(array $base, array $config)
+    {
+        return [
+            'BusinessShortCode' => config('services.safaricom.shortcode'),
+            'Password' => base64_encode(config('services.safaricom.shortcode') . config('services.safaricom.passkey') . date('YmdHis')),
+            'Timestamp' => date('YmdHis'),
+            'TransactionType' => 'CustomerPayBillOnline',
+            'Amount' => $base['amount'],
+            'PartyA' => $base['phone_number'],
+            'PartyB' => config('services.safaricom.shortcode'),
+            'PhoneNumber' => $base['phone_number'],
+            'CallBackURL' => route('mobile-money.callback', 'safaricom_mpesa'),
+            'AccountReference' => $base['reference'],
+            'TransactionDesc' => $base['description'],
+        ];
+    }
+
+    protected function buildVodacomPayload(array $base, array $config)
+    {
+        // Similar to Safaricom but with Vodacom specifics
+        return $this->buildSafaricomPayload($base, $config);
+    }
+
+    protected function buildTigoPesaPayload(array $base, array $config)
+    {
+        return [
+            'MasterMerchant' => config('services.tigo.merchant_id'),
+            'MerchantReference' => $base['reference'],
+            'Amount' => $base['amount'],
+            'MSISDNNumber' => $base['phone_number'],
+            'Description' => $base['description'],
+        ];
+    }
+
+    /**
+     * Parse provider response
+     */
+    protected function parseProviderResponse(array $data, string $provider)
+    {
+        return match($provider) {
+            'mtn_mobile_money' => [
+                'success' => !isset($data['error']),
+                'transaction_id' => $data['referenceId'] ?? null,
+                'message' => $data['error']['message'] ?? 'Payment initiated',
+            ],
+            'safaricom_mpesa' => [
+                'success' => ($data['ResponseCode'] ?? null) === '0',
+                'transaction_id' => $data['CheckoutRequestID'] ?? null,
+                'message' => $data['ResponseDescription'] ?? 'Payment initiated',
+            ],
+            default => [
+                'success' => true,
+                'transaction_id' => $data['transaction_id'] ?? null,
+                'message' => 'Payment initiated',
+            ],
+        };
+    }
+
+    /**
+     * Find payment from callback data
+     */
+    protected function findPaymentFromCallback(string $provider, array $data)
+    {
+        $reference = match($provider) {
+            'mtn_mobile_money' => $data['externalId'] ?? null,
+            'safaricom_mpesa' => $data['Body']['stkCallback']['CheckoutRequestID'] ?? null,
+            default => $data['reference'] ?? null,
+        };
+
+        if (!$reference) {
+            return null;
+        }
+
+        return MobileMoneyPayment::where('transaction_id', $reference)
+            ->orWhere('external_transaction_id', $reference)
+            ->first();
+    }
+
+    /**
+     * Parse callback status
+     */
+    protected function parseCallbackStatus(string $provider, array $data)
+    {
+        return match($provider) {
+            'mtn_mobile_money' => isset($data['status']) && $data['status'] === 'SUCCESSFUL' ? 'success' : 'failed',
+            'safaricom_mpesa' => ($data['Body']['stkCallback']['ResultCode'] ?? null) === 0 ? 'success' : 'failed',
+            default => ($data['status'] ?? 'failed') === 'success' ? 'success' : 'failed',
+        };
+    }
+}
