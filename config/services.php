@@ -86,4 +86,11 @@ return [
         'endpoint' => env('TIGO_ENDPOINT'),
     ],
 
+    'orange' => [
+        'api_key' => env('ORANGE_API_KEY'),
+        'api_secret' => env('ORANGE_API_SECRET'),
+        'merchant_id' => env('ORANGE_MERCHANT_ID'),
+        'endpoint' => env('ORANGE_ENDPOINT'),
+    ],
+
 ];

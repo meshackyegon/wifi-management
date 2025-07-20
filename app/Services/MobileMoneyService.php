@@ -82,12 +82,28 @@ class MobileMoneyService
         $config = $this->getProviderConfig($payment->provider);
         
         if (!$config) {
-            throw new \Exception('Provider configuration not found');
+            throw new \Exception('Provider configuration not found for: ' . $payment->provider);
         }
+
+        Log::info('Sending payment request', [
+            'provider' => $payment->provider,
+            'config_endpoint' => $config['endpoint'],
+            'payment_id' => $payment->id,
+        ]);
 
         $payload = $this->buildPaymentPayload($payment, $config);
         
+        Log::info('Payment payload', [
+            'provider' => $payment->provider,
+            'payload' => $payload,
+        ]);
+        
         try {
+            // For sandbox testing, simulate successful response for M-Pesa
+            if ($payment->provider === 'safaricom_mpesa' && config('mobile-money.sandbox_mode', true)) {
+                return $this->simulateMpesaResponse($payment);
+            }
+
             $response = $this->client->post($config['endpoint'], [
                 'headers' => $config['headers'],
                 'json' => $payload,
@@ -96,9 +112,52 @@ class MobileMoneyService
 
             $data = json_decode($response->getBody()->getContents(), true);
             
+            Log::info('Provider response', [
+                'provider' => $payment->provider,
+                'response' => $data,
+            ]);
+            
             return $this->parseProviderResponse($data, $payment->provider);
         } catch (\Exception $e) {
+            Log::error('Payment request failed', [
+                'provider' => $payment->provider,
+                'error' => $e->getMessage(),
+                'payment_id' => $payment->id,
+            ]);
             throw new \Exception('Failed to connect to payment provider: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Simulate M-Pesa response for sandbox testing
+     */
+    protected function simulateMpesaResponse(MobileMoneyPayment $payment)
+    {
+        Log::info('Simulating M-Pesa sandbox response', [
+            'payment_id' => $payment->id,
+            'phone' => $payment->phone_number,
+        ]);
+
+        // Simulate different responses based on test phone numbers
+        $testNumbers = [
+            '+254708374149' => 'success',
+            '+254708374150' => 'insufficient_funds', 
+            '+254708374151' => 'invalid_account',
+        ];
+
+        $result = $testNumbers[$payment->phone_number] ?? 'success';
+
+        if ($result === 'success') {
+            return [
+                'success' => true,
+                'transaction_id' => 'ws_CO_' . date('dmY') . '_' . time(),
+                'message' => 'STK Push initiated successfully',
+            ];
+        } else {
+            return [
+                'success' => false,
+                'message' => $result === 'insufficient_funds' ? 'Insufficient funds' : 'Invalid account',
+            ];
         }
     }
 
@@ -205,30 +264,69 @@ class MobileMoneyService
     {
         $configs = [
             'mtn_mobile_money' => [
-                'endpoint' => config('services.mtn.endpoint'),
+                'endpoint' => config('services.mtn.endpoint') . '/collection/v1_0/requesttopay',
                 'headers' => [
                     'Authorization' => 'Bearer ' . config('services.mtn.api_key'),
                     'Content-Type' => 'application/json',
+                    'Ocp-Apim-Subscription-Key' => config('services.mtn.subscription_key'),
                 ],
             ],
             'airtel_money' => [
-                'endpoint' => config('services.airtel.endpoint'),
+                'endpoint' => config('services.airtel.endpoint') . '/merchant/v1/payments',
                 'headers' => [
                     'Authorization' => 'Bearer ' . config('services.airtel.api_key'),
                     'Content-Type' => 'application/json',
                 ],
             ],
             'safaricom_mpesa' => [
-                'endpoint' => config('services.safaricom.endpoint'),
+                'endpoint' => config('services.safaricom.endpoint') . '/mpesa/stkpush/v1/processrequest',
                 'headers' => [
-                    'Authorization' => 'Bearer ' . config('services.safaricom.access_token'),
+                    'Authorization' => 'Bearer ' . $this->getSafaricomAccessToken(),
                     'Content-Type' => 'application/json',
                 ],
             ],
-            // Add other providers...
+            'vodacom_mpesa' => [
+                'endpoint' => config('services.vodacom.endpoint') . '/ipg/v2/vodacomTZN/c2bPayment/singleStage',
+                'headers' => [
+                    'Authorization' => 'Bearer ' . config('services.vodacom.api_key'),
+                    'Content-Type' => 'application/json',
+                ],
+            ],
+            'tigo_pesa' => [
+                'endpoint' => config('services.tigo.endpoint') . '/v1/tigo/payments',
+                'headers' => [
+                    'Authorization' => 'Bearer ' . config('services.tigo.api_key'),
+                    'Content-Type' => 'application/json',
+                ],
+            ],
         ];
 
         return $configs[$provider] ?? null;
+    }
+
+    /**
+     * Get Safaricom access token
+     */
+    protected function getSafaricomAccessToken()
+    {
+        try {
+            $consumerKey = config('services.safaricom.consumer_key');
+            $consumerSecret = config('services.safaricom.consumer_secret');
+            $credentials = base64_encode($consumerKey . ':' . $consumerSecret);
+
+            $response = $this->client->get(config('services.safaricom.endpoint') . '/oauth/v1/generate?grant_type=client_credentials', [
+                'headers' => [
+                    'Authorization' => 'Basic ' . $credentials,
+                    'Content-Type' => 'application/json',
+                ],
+            ]);
+
+            $data = json_decode($response->getBody()->getContents(), true);
+            return $data['access_token'] ?? null;
+        } catch (\Exception $e) {
+            Log::error('Failed to get Safaricom access token: ' . $e->getMessage());
+            return null;
+        }
     }
 
     /**

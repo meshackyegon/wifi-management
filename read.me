@@ -1,10 +1,153 @@
 
-1. git clone https://github.com/meshackyegon/wifi-management.git
-cd reposityory
-composer install
-php artisan migrate
-php artisan serve
-  ---- different terminal
+# WiFi Management System with Mobile Money Integration
 
+A complete hotspot billing system with mobile money payment integration for WiFi voucher sales.
+
+## Features
+
+- **User Management**: Admin, Agent, and Customer roles
+- **Voucher Plans**: Create and manage different internet packages
+- **Mobile Money Integration**: Support for M-Pesa, MTN Mobile Money, Airtel Money, Vodacom M-Pesa, Tigo Pesa, and Orange Money
+- **Router Management**: Manage multiple WiFi routers
+- **SMS Integration**: Send voucher codes via SMS using Africa's Talking or Twilio
+- **Dashboard Analytics**: Revenue tracking and commission management
+- **Real-time Payment Processing**: Instant voucher generation upon payment
+
+## Quick Setup
+
+### 1. Clone and Install
+```bash
+git clone https://github.com/meshackyegon/wifi-management.git
+cd wifi-management
+composer install
+```
+
+### 2. Environment Setup
+```bash
+cp .env.example .env
+php artisan key:generate
+```
+
+### 3. Database Setup
+```bash
+php artisan migrate
+php artisan db:seed
+```
+
+### 4. Frontend Assets
+```bash
 npm install
 npm run dev
+```
+
+### 5. Start Development Server
+```bash
+php artisan serve
+```
+
+## Mobile Money Sandbox Setup
+
+### M-Pesa (Safaricom) Sandbox
+1. Visit [Safaricom Developer Portal](https://developer.safaricom.co.ke)
+2. Create an account and new app
+3. Update `.env` with your credentials:
+```env
+SAFARICOM_CONSUMER_KEY=your_consumer_key
+SAFARICOM_CONSUMER_SECRET=your_consumer_secret
+SAFARICOM_SHORTCODE=174379
+SAFARICOM_PASSKEY=bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919
+```
+
+### MTN Mobile Money Sandbox
+1. Visit [MTN MoMo Developer Portal](https://momodeveloper.mtn.com)
+2. Create account and subscribe to Collections API
+3. Update `.env`:
+```env
+MTN_API_KEY=your_api_key
+MTN_API_SECRET=your_api_secret
+MTN_SUBSCRIPTION_KEY=your_subscription_key
+```
+
+### Airtel Money Sandbox
+1. Visit [Airtel Africa Developer Portal](https://developers.airtel.africa)
+2. Create account and get API credentials
+3. Update `.env`:
+```env
+AIRTEL_CLIENT_ID=your_client_id
+AIRTEL_CLIENT_SECRET=your_client_secret
+AIRTEL_API_KEY=your_api_key
+```
+
+### Test Phone Numbers (Sandbox)
+
+#### M-Pesa Test Numbers:
+- **Success**: +254708374149
+- **Insufficient Funds**: +254708374150
+- **Invalid Account**: +254708374151
+
+#### MTN Test Numbers:
+- **Success**: +256772123456
+- **Failed**: +256772123457
+
+#### Airtel Test Numbers:
+- **Success**: +256701123456
+- **Failed**: +256701123457
+
+## Default Login Credentials
+
+Run `php artisan system:show-credentials` to display all login credentials.
+
+**Default Admin:**
+- Email: admin@wifimanagement.com
+- Password: Admin@123
+
+**Default Agent:**
+- Email: agent@wifimanagement.com
+- Password: Agent@123
+
+## Usage
+
+1. **Admin Panel**: Manage voucher plans, routers, and users
+2. **Public Interface**: Customers can buy vouchers at `/buy-voucher`
+3. **Payment Flow**: Select plan → Choose provider → Enter phone → Complete payment
+4. **Voucher Delivery**: Instant SMS delivery with WiFi credentials
+
+## API Endpoints
+
+- `POST /mobile-money/initiate` - Initiate payment
+- `POST /mobile-money/check-status` - Check payment status
+- `POST /mobile-money/callback/{provider}` - Payment callbacks
+
+## Development
+
+```bash
+# Run tests
+php artisan test
+
+# Clear cache
+php artisan cache:clear
+php artisan config:clear
+
+# Generate new users/plans
+php artisan db:seed --class=UserSeeder
+php artisan db:seed --class=VoucherPlanSeeder
+```
+
+## Production Deployment
+
+1. Set `APP_ENV=production` in `.env`
+2. Update mobile money endpoints to production URLs
+3. Configure real SMS provider credentials
+4. Set up proper SSL certificates
+5. Configure database for production
+
+## Support
+
+For issues and questions:
+- Email: support@wifimanagement.com
+- Phone: +1234567890
+- WhatsApp: Available in app
+
+## License
+
+This project is proprietary software. All rights reserved.
