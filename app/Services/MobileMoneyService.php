@@ -6,6 +6,7 @@ use App\Models\MobileMoneyPayment;
 use App\Models\VoucherPlan;
 use App\Models\Voucher;
 use App\Models\User;
+use App\Services\MpesaService;
 use GuzzleHttp\Client;
 use Illuminate\Support\Facades\Log;
 
@@ -14,12 +15,14 @@ class MobileMoneyService
     protected $client;
     protected $voucherService;
     protected $smsService;
+    protected $mpesaService;
 
-    public function __construct(VoucherService $voucherService, SmsService $smsService)
+    public function __construct(VoucherService $voucherService, SmsService $smsService, MpesaService $mpesaService)
     {
         $this->client = new Client();
         $this->voucherService = $voucherService;
         $this->smsService = $smsService;
+        $this->mpesaService = $mpesaService;
     }
 
     /**
@@ -79,6 +82,12 @@ class MobileMoneyService
      */
     protected function sendPaymentRequest(MobileMoneyPayment $payment)
     {
+        // Handle M-Pesa STK Push with real integration
+        if ($payment->provider === 'safaricom_mpesa') {
+            return $this->sendMpesaStkPush($payment);
+        }
+
+        // Handle other providers (existing logic)
         $config = $this->getProviderConfig($payment->provider);
         
         if (!$config) {
@@ -99,11 +108,6 @@ class MobileMoneyService
         ]);
         
         try {
-            // For sandbox testing, simulate successful response for M-Pesa
-            if ($payment->provider === 'safaricom_mpesa' && config('mobile-money.sandbox_mode', true)) {
-                return $this->simulateMpesaResponse($payment);
-            }
-
             $response = $this->client->post($config['endpoint'], [
                 'headers' => $config['headers'],
                 'json' => $payload,
@@ -125,6 +129,46 @@ class MobileMoneyService
                 'payment_id' => $payment->id,
             ]);
             throw new \Exception('Failed to connect to payment provider: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Send M-Pesa STK Push using real M-Pesa API
+     */
+    protected function sendMpesaStkPush(MobileMoneyPayment $payment)
+    {
+        Log::info('Sending real M-Pesa STK Push', [
+            'payment_id' => $payment->id,
+            'phone' => $payment->phone_number,
+            'amount' => $payment->amount
+        ]);
+
+        try {
+            $result = $this->mpesaService->stkPush($payment);
+            
+            if ($result['success']) {
+                return [
+                    'success' => true,
+                    'transaction_id' => $result['checkout_request_id'],
+                    'message' => $result['customer_message'],
+                    'external_data' => $result
+                ];
+            } else {
+                return [
+                    'success' => false,
+                    'message' => $result['error']
+                ];
+            }
+        } catch (\Exception $e) {
+            Log::error('M-Pesa STK Push failed', [
+                'payment_id' => $payment->id,
+                'error' => $e->getMessage()
+            ]);
+            
+            return [
+                'success' => false,
+                'message' => 'Failed to initiate M-Pesa payment: ' . $e->getMessage()
+            ];
         }
     }
 
@@ -238,8 +282,21 @@ class MobileMoneyService
             $payment->voucher_id = $voucher->id;
             $payment->save();
 
-            // Send SMS with voucher code
+            // Send SMS with voucher code to customer
             $this->smsService->sendVoucherSMS($payment->phone_number, $voucher);
+
+            // Send SMS notification to admin about successful purchase
+            $adminPhone = config('sms.admin_notification_phone');
+            if ($adminPhone) {
+                $adminMessage = "New voucher purchased!\n";
+                $adminMessage .= "Plan: {$payment->voucherPlan->name}\n";
+                $adminMessage .= "Amount: KES {$payment->amount}\n";
+                $adminMessage .= "Customer: {$payment->phone_number}\n";
+                $adminMessage .= "Code: {$voucher->code}\n";
+                $adminMessage .= "Time: " . now()->format('Y-m-d H:i:s');
+                
+                $this->smsService->sendSMS($adminPhone, $adminMessage);
+            }
 
             Log::info('Payment processed successfully', [
                 'payment_id' => $payment->id,
@@ -453,5 +510,56 @@ class MobileMoneyService
             'safaricom_mpesa' => ($data['Body']['stkCallback']['ResultCode'] ?? null) === 0 ? 'success' : 'failed',
             default => ($data['status'] ?? 'failed') === 'success' ? 'success' : 'failed',
         };
+    }
+
+    /**
+     * Complete voucher purchase after successful payment
+     */
+    public function completeVoucherPurchase(MobileMoneyPayment $payment)
+    {
+        try {
+            // Generate voucher code
+            $voucherCode = 'WM' . str_pad(rand(0, 999999), 6, '0', STR_PAD_LEFT);
+
+            // Create voucher
+            $voucher = Voucher::create([
+                'voucher_plan_id' => $payment->voucher_plan_id,
+                'phone' => $payment->phone,
+                'code' => $voucherCode,
+                'mobile_money_payment_id' => $payment->id,
+                'status' => 'active'
+            ]);
+
+            // Get the voucher plan for SMS content
+            $plan = $payment->voucherPlan;
+            
+            // Send SMS with voucher code
+            $message = "Your WiFi voucher: Code: {$voucherCode}, Plan: {$plan->name} ({$plan->data_limit}), Valid for {$plan->duration_days} days. Use this code to access WiFi.";
+            
+            $this->smsService->sendSms(
+                $payment->phone,
+                $message,
+                'voucher_delivery'
+            );
+
+            Log::info('Voucher purchase completed', [
+                'payment_id' => $payment->id,
+                'voucher_id' => $voucher->id,
+                'voucher_code' => $voucherCode,
+                'phone' => $payment->phone,
+                'plan' => $plan->name
+            ]);
+
+            return $voucher;
+
+        } catch (\Exception $e) {
+            Log::error('Error completing voucher purchase', [
+                'payment_id' => $payment->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            throw $e;
+        }
     }
 }

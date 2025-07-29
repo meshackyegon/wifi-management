@@ -165,7 +165,7 @@ class MobileMoneyController extends Controller
     {
         $user = auth()->user();
         
-        $query = MobileMoneyPayment::with(['voucherPlan', 'voucher']);
+        $query = MobileMoneyPayment::with(['voucherPlan', 'voucher', 'smsLogs']);
 
         // Filter by user type
         if ($user->isCustomer()) {

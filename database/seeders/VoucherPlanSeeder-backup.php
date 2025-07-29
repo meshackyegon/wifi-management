@@ -1,7 +1,5 @@
 <?php
 
-namespace Database\Seeders;
-
 use Illuminate\Database\Seeder;
 use App\Models\VoucherPlan;
 
@@ -14,20 +12,20 @@ class VoucherPlanSeeder extends Seeder
     {
         $plans = [
             [
-                'name' => 'Mini Plan',
-                'description' => 'Quick access for basic browsing',
-                'duration_hours' => 1,
-                'data_limit_mb' => 200,
-                'price' => 1.00,
-                'bandwidth_limit_kbps' => 2048, // 2 Mbps
-                'is_active' => true,
-            ],
-            [
                 'name' => 'Basic 1 Hour',
                 'description' => 'Perfect for quick browsing and social media',
                 'duration_hours' => 1,
                 'data_limit_mb' => 500,
                 'price' => 100.00,
+                'bandwidth_limit_kbps' => 5120, // 5 Mbps
+                'is_active' => true,
+            ],
+              [
+                'name' => 'Basic 1 Hour',
+                'description' => 'Perfect for quick browsing and social media',
+                'duration_hours' => 1,
+                'data_limit_mb' => 200,
+                'price' => 1.00,
                 'bandwidth_limit_kbps' => 5120, // 5 Mbps
                 'is_active' => true,
             ],

@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id();
             $table->string('phone_number');
             $table->text('message');
-            $table->enum('provider', ['africastalking', 'twilio'])->default('africastalking');
+            $table->enum('provider', ['africastalking', 'twilio', 'jambopay'])->default('jambopay');
             $table->enum('status', ['pending', 'sent', 'failed', 'delivered'])->default('pending');
             $table->string('external_id')->nullable(); // provider's message ID
             $table->foreignId('voucher_id')->nullable()->constrained()->onDelete('set null');

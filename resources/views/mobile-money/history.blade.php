@@ -1,19 +1,31 @@
-@section('title', 'Payment History')
-<x-layouts.app title="Payment History">
+@section('title', 'Purchase History')
+@php
+    use Illuminate\Support\Str;
+@endphp
+<x-layouts.app title="Purchase History">
 
 <div class="container-fluid">
-    <!-- Page Header -->
+    <!-- Hero Section -->
     <div class="row mb-4">
         <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center">
-                <h1 class="h3 mb-0 text-gray-800">Payment History</h1>
-                <div class="d-flex gap-2">
-                    <a href="{{ route('mobile-money.export') }}" class="btn btn-outline-primary">
-                        <i class="fas fa-download"></i> Export
-                    </a>
-                    <a href="{{ route('dashboard') }}" class="btn btn-outline-secondary">
-                        <i class="fas fa-arrow-left"></i> Back to Dashboard
-                    </a>
+            <div class="card bg-gradient-success text-white shadow-lg border-0">
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col-lg-8">
+                            <h1 class="h2 mb-2 text-white">💳 Purchase History & SMS Tracking</h1>
+                            <p class="mb-0 text-white-75">Complete overview of all transactions and communications</p>
+                        </div>
+                        <div class="col-lg-4 text-lg-end">
+                            <div class="d-flex gap-2 justify-content-lg-end">
+                                <a href="{{ route('mobile-money.export') }}" class="btn btn-light btn-lg">
+                                    <i class="fas fa-download"></i> Export Data
+                                </a>
+                                <a href="{{ route('dashboard') }}" class="btn btn-outline-light btn-lg">
+                                    <i class="fas fa-arrow-left"></i> Dashboard
+                                </a>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -76,7 +88,7 @@
 
     <!-- Summary Cards -->
     <div class="row mb-4">
-        <div class="col-xl-3 col-md-6 mb-4">
+        <div class="col-xl-2 col-md-4 mb-4">
             <div class="card border-left-primary shadow h-100 py-2">
                 <div class="card-body">
                     <div class="row no-gutters align-items-center">
@@ -96,7 +108,7 @@
             </div>
         </div>
 
-        <div class="col-xl-3 col-md-6 mb-4">
+        <div class="col-xl-2 col-md-4 mb-4">
             <div class="card border-left-success shadow h-100 py-2">
                 <div class="card-body">
                     <div class="row no-gutters align-items-center">
@@ -116,7 +128,7 @@
             </div>
         </div>
 
-        <div class="col-xl-3 col-md-6 mb-4">
+        <div class="col-xl-2 col-md-4 mb-4">
             <div class="card border-left-warning shadow h-100 py-2">
                 <div class="card-body">
                     <div class="row no-gutters align-items-center">
@@ -136,7 +148,7 @@
             </div>
         </div>
 
-        <div class="col-xl-3 col-md-6 mb-4">
+        <div class="col-xl-2 col-md-4 mb-4">
             <div class="card border-left-info shadow h-100 py-2">
                 <div class="card-body">
                     <div class="row no-gutters align-items-center">
@@ -145,11 +157,51 @@
                                 Total Revenue
                             </div>
                             <div class="h5 mb-0 font-weight-bold text-gray-800">
-                                ${{ number_format($payments->where('status', 'completed')->sum('amount'), 2) }}
+                                KES {{ number_format($payments->where('status', 'completed')->sum('amount'), 2) }}
                             </div>
                         </div>
                         <div class="col-auto">
                             <i class="fas fa-dollar-sign fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-2 col-md-4 mb-4">
+            <div class="card border-left-secondary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-secondary text-uppercase mb-1">
+                                SMS Sent
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {{ $payments->sum(function($payment) { return $payment->smsLogs->count(); }) }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-sms fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-2 col-md-4 mb-4">
+            <div class="card border-left-danger shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
+                                Failed
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {{ $payments->where('status', 'failed')->count() }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-times-circle fa-2x text-gray-300"></i>
                         </div>
                     </div>
                 </div>
@@ -189,6 +241,7 @@
                                 <th>Amount</th>
                                 <th>Status</th>
                                 <th>Voucher</th>
+                                <th>SMS Status</th>
                                 <th>Date</th>
                                 <th>Actions</th>
                             </tr>
@@ -238,6 +291,47 @@
                                             <br><small class="text-muted">{{ $payment->voucher->voucherPlan->name }}</small>
                                         @else
                                             <span class="text-muted">No voucher</span>
+                                        @endif
+                                    </td>
+                                    <td>
+                                        @if($payment->smsLogs && $payment->smsLogs->count() > 0)
+                                            @php $latestSms = $payment->smsLogs->first(); @endphp
+                                            @switch($latestSms->status)
+                                                @case('sent')
+                                                    <span class="badge bg-success">
+                                                        <i class="fas fa-check"></i> Sent
+                                                    </span>
+                                                    <br><small class="text-muted">{{ $latestSms->sent_at?->format('M d, H:i') }}</small>
+                                                    @break
+                                                @case('delivered')
+                                                    <span class="badge bg-success">
+                                                        <i class="fas fa-check-double"></i> Delivered
+                                                    </span>
+                                                    <br><small class="text-muted">{{ $latestSms->delivered_at?->format('M d, H:i') }}</small>
+                                                    @break
+                                                @case('failed')
+                                                    <span class="badge bg-danger">
+                                                        <i class="fas fa-times"></i> Failed
+                                                    </span>
+                                                    @if($latestSms->error_message)
+                                                        <br><small class="text-muted">{{ Str::limit($latestSms->error_message, 30) }}</small>
+                                                    @endif
+                                                    @break
+                                                @case('pending')
+                                                    <span class="badge bg-warning">
+                                                        <i class="fas fa-clock"></i> Pending
+                                                    </span>
+                                                    @break
+                                                @default
+                                                    <span class="badge bg-secondary">{{ ucfirst($latestSms->status) }}</span>
+                                            @endswitch
+                                            @if($payment->smsLogs->count() > 1)
+                                                <br><small class="text-muted">{{ $payment->smsLogs->count() }} SMS sent</small>
+                                            @endif
+                                        @else
+                                            <span class="badge bg-secondary">
+                                                <i class="fas fa-minus"></i> No SMS
+                                            </span>
                                         @endif
                                     </td>
                                     <td>
@@ -354,7 +448,7 @@ function viewPaymentDetails(paymentId) {
 function resendVoucher(voucherId) {
     if (confirm('Are you sure you want to resend the voucher SMS?')) {
         // Here you would make an AJAX call to resend the SMS
-        fetch(`/vouchers/${voucherId}/resend-sms`, {
+        fetch(`/sms/resend-voucher/${voucherId}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

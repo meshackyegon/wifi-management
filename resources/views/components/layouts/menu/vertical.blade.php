@@ -79,6 +79,18 @@
           </ul>
         </li>
 
+        <li class="menu-item {{ request()->is('sms*') ? 'active open' : '' }}">
+          <a href="javascript:void(0);" class="menu-link menu-toggle">
+            <i class="menu-icon tf-icons bx bx-message-dots"></i>
+            <div class="text-truncate">{{ __('SMS') }}</div>
+          </a>
+          <ul class="menu-sub">
+            <li class="menu-item {{ request()->routeIs('sms.logs') ? 'active' : '' }}">
+              <a class="menu-link" href="{{ route('sms.logs') }}" wire:navigate>{{ __('SMS Logs') }}</a>
+            </li>
+          </ul>
+        </li>
+
       @elseif(auth()->user()->isAdmin())
         <!-- Admin Menu -->
         <li class="menu-header small text-uppercase">

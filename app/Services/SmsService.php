@@ -72,6 +72,7 @@ class SmsService
 
         try {
             $result = match($provider) {
+                'jambopay' => $this->sendViaJamboPay($phoneNumber, $message),
                 'africastalking' => $this->sendViaAfricasTalking($phoneNumber, $message),
                 'twilio' => $this->sendViaTwilio($phoneNumber, $message),
                 default => throw new \Exception('Unsupported SMS provider'),
@@ -179,6 +180,169 @@ class SmsService
         } catch (\Exception $e) {
             throw new \Exception('Twilio error: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Send SMS via JamboPay
+     */
+    protected function sendViaJamboPay(string $phoneNumber, string $message)
+    {
+        try {
+            // Step 1: Get access token
+            $accessToken = $this->getJamboPayAccessToken();
+            
+            if (!$accessToken) {
+                throw new \Exception('Failed to get JamboPay access token');
+            }
+
+            // Step 2: Send SMS
+            $response = $this->sendJamboPaySms($phoneNumber, $message, $accessToken);
+            
+            return $response;
+        } catch (\Exception $e) {
+            throw new \Exception('JamboPay error: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Get JamboPay access token
+     */
+    protected function getJamboPayAccessToken()
+    {
+        $curl = curl_init();
+
+        // Use the exact credentials and format from your working code
+        $postFields = 'grant_type=client_credentials&client_id=' . 
+            config('sms.providers.jambopay.client_id') . 
+            '&client_secret=' . 
+            config('sms.providers.jambopay.client_secret');
+
+        curl_setopt_array($curl, array(
+            CURLOPT_URL => config('sms.providers.jambopay.auth_url'),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_ENCODING => '',
+            CURLOPT_MAXREDIRS => 10,
+            CURLOPT_TIMEOUT => 0,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+            CURLOPT_CUSTOMREQUEST => 'POST',
+            CURLOPT_POSTFIELDS => $postFields,
+            CURLOPT_SSL_VERIFYPEER => false,  // Disable SSL verification for development
+            CURLOPT_SSL_VERIFYHOST => false,  // Disable SSL verification for development
+            CURLOPT_HTTPHEADER => array(
+                'Content-Type: application/x-www-form-urlencoded'
+            ),
+        ));
+
+        $response = curl_exec($curl);
+        $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        
+        if (curl_error($curl)) {
+            $error = curl_error($curl);
+            curl_close($curl);
+            Log::error('JamboPay cURL error', ['error' => $error]);
+            return null;
+        }
+        
+        curl_close($curl);
+
+        Log::info('JamboPay auth response', ['response' => $response, 'http_code' => $httpCode]);
+
+        if ($httpCode !== 200) {
+            Log::error('JamboPay auth failed', ['response' => $response, 'http_code' => $httpCode]);
+            return null;
+        }
+
+        $data = json_decode($response, true);
+        
+        if (isset($data['access_token'])) {
+            Log::info('JamboPay access token obtained successfully');
+            return $data['access_token'];
+        }
+
+        Log::error('JamboPay access token not found in response', ['response' => $data]);
+        return null;
+    }
+
+    /**
+     * Send SMS using JamboPay API
+     */
+    protected function sendJamboPaySms(string $phoneNumber, string $message, string $accessToken)
+    {
+        // Format phone number for Kenyan numbers
+        $formattedPhone = $this->formatKenyanPhoneNumber($phoneNumber);
+        
+        $payload = [
+            'contact' => $formattedPhone,
+            'message' => $message,
+            'callback' => config('sms.providers.jambopay.callback_url'),
+            'sender_name' => config('sms.providers.jambopay.sender_name', 'VESEN')
+        ];
+
+        $curl = curl_init();
+        curl_setopt_array($curl, array(
+            CURLOPT_URL => config('sms.providers.jambopay.send_url'),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_ENCODING => '',
+            CURLOPT_MAXREDIRS => 10,
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+            CURLOPT_CUSTOMREQUEST => 'POST',
+            CURLOPT_POSTFIELDS => json_encode($payload),
+            CURLOPT_SSL_VERIFYPEER => false,  // Disable SSL verification for development
+            CURLOPT_SSL_VERIFYHOST => false,  // Disable SSL verification for development
+            CURLOPT_HTTPHEADER => array(
+                'Authorization: Bearer ' . $accessToken,
+                'Content-Type: application/json'
+            ),
+        ));
+
+        $response = curl_exec($curl);
+        $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        curl_close($curl);
+
+        Log::info('JamboPay SMS response', [
+            'phone' => $formattedPhone,
+            'response' => $response,
+            'http_code' => $httpCode
+        ]);
+
+        if ($httpCode === 200 || $httpCode === 201) {
+            $data = json_decode($response, true);
+            
+            return [
+                'success' => true,
+                'external_id' => $data['message_id'] ?? $data['id'] ?? uniqid('jambopay_'),
+                'cost' => 0, // Cost would be tracked by JamboPay
+            ];
+        } else {
+            return [
+                'success' => false,
+                'error' => 'HTTP ' . $httpCode . ': ' . $response,
+            ];
+        }
+    }
+
+    /**
+     * Format Kenyan phone number for SMS
+     */
+    protected function formatKenyanPhoneNumber(string $phoneNumber)
+    {
+        // Remove any non-digit characters
+        $phoneNumber = preg_replace('/[^0-9]/', '', $phoneNumber);
+        
+        // If starts with 0, replace with 254
+        if (substr($phoneNumber, 0, 1) === '0') {
+            $phoneNumber = '254' . substr($phoneNumber, 1);
+        }
+        
+        // If doesn't start with 254, add it
+        if (substr($phoneNumber, 0, 3) !== '254') {
+            $phoneNumber = '254' . $phoneNumber;
+        }
+        
+        return $phoneNumber;
     }
 
     /**

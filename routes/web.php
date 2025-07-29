@@ -21,6 +21,13 @@ Route::prefix('mobile-money')->name('mobile-money.')->group(function () {
     Route::post('/callback/{provider}', [MobileMoneyController::class, 'handleCallback'])->name('callback');
 });
 
+// M-Pesa Callback Routes (for NGrok)
+Route::prefix('mpesa')->name('mpesa.')->group(function () {
+    Route::post('/stk-callback', [App\Http\Controllers\MpesaCallbackController::class, 'stkCallback'])->name('stk-callback');
+    Route::post('/validation', [App\Http\Controllers\MpesaCallbackController::class, 'validation'])->name('validation');
+    Route::post('/confirmation', [App\Http\Controllers\MpesaCallbackController::class, 'confirmation'])->name('confirmation');
+});
+
 // Authenticated routes
 Route::middleware(['auth', 'verified'])->group(function () {
     // Dashboard
@@ -73,9 +80,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     
     // SMS Management
     Route::prefix('sms')->name('sms.')->group(function () {
-        Volt::route('/', 'sms.index')->name('index');
-        Volt::route('/send', 'sms.send')->name('send');
-        Volt::route('/logs', 'sms.logs')->name('logs');
+        Route::get('/', [App\Http\Controllers\SmsController::class, 'index'])->name('index');
+        Route::post('/send', [App\Http\Controllers\SmsController::class, 'send'])->name('send');
+        Route::get('/logs', [App\Http\Controllers\SmsController::class, 'logs'])->name('logs');
+        Route::post('/resend-voucher/{voucher}', [App\Http\Controllers\SmsController::class, 'resendVoucherSms'])->name('resend-voucher');
     });
     
     // Reports (Admin and Agent)
