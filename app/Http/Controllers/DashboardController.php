@@ -83,18 +83,17 @@ class DashboardController extends Controller
                 'active_routers' => Router::where('is_active', true)->count(),
                 
                 // Recent transactions for the table
-                'recent_transactions' => MobileMoneyPayment::with(['voucherPlan', 'voucher'])
+                'recent_transactions' => MobileMoneyPayment::with(['user'])
                     ->latest()
                     ->take(5)
                     ->get()
                     ->map(function ($payment) {
                         return [
                             'created_at' => $payment->created_at,
-                            'customer_name' => $payment->phone_number, // Use phone number as customer identifier
-                            'plan_name' => $payment->voucherPlan->name ?? 'N/A',
+                            'customer_name' => $payment->user->name ?? 'Unknown',
+                            'plan_name' => $payment->plan_name ?? 'N/A',
                             'amount' => $payment->amount,
                             'status' => $payment->status,
-                            'voucher_code' => $payment->voucher->code ?? 'N/A',
                         ];
                     }),
 

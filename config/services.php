@@ -70,7 +70,6 @@ return [
         'passkey' => env('SAFARICOM_PASSKEY'),
         'endpoint' => env('SAFARICOM_ENDPOINT', 'https://sandbox.safaricom.co.ke'),
         'access_token' => env('SAFARICOM_ACCESS_TOKEN'),
-        'callback_url' => env('MPESA_STK_CALLBACK_URL'),
     ],
 
     'vodacom' => [

@@ -4,16 +4,17 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use App\Models\MobileMoneyPayment;
-use App\Services\MobileMoneyService;
+use App\Models\Payment;
+use App\Models\Voucher;
+use App\Services\SmsService;
 
 class MpesaCallbackController extends Controller
 {
-    protected $mobileMoneyService;
+    protected $smsService;
 
-    public function __construct(MobileMoneyService $mobileMoneyService)
+    public function __construct(SmsService $smsService)
     {
-        $this->mobileMoneyService = $mobileMoneyService;
+        $this->smsService = $smsService;
     }
 
     /**
@@ -48,70 +49,44 @@ class MpesaCallbackController extends Controller
                 'result_desc' => $resultDesc
             ]);
 
-            // Find the payment record using checkout request ID
-            $payment = MobileMoneyPayment::where('transaction_id', $checkoutRequestId)
-                ->orWhere('reference', $checkoutRequestId)
-                ->first();
+            // Find the payment record
+            $payment = Payment::where('checkout_request_id', $checkoutRequestId)->first();
 
             if (!$payment) {
-                Log::warning('Payment record not found for callback', [
-                    'checkout_request_id' => $checkoutRequestId,
-                    'merchant_request_id' => $merchantRequestId
-                ]);
-                return response()->json(['ResultCode' => 0, 'ResultDesc' => 'Payment not found but acknowledged']);
+                Log::error('Payment not found for checkout request', ['checkout_request_id' => $checkoutRequestId]);
+                return response()->json(['ResultCode' => 1, 'ResultDesc' => 'Payment not found']);
             }
 
-            // Process the callback result
             if ($resultCode == 0) {
-                // Success
+                // Payment successful
                 $callbackMetadata = $callbackData['CallbackMetadata']['Item'] ?? [];
-                $mpesaReceiptNumber = null;
-                $transactionDate = null;
-                $phoneNumber = null;
-                $amount = null;
+                $paymentDetails = $this->extractPaymentDetails($callbackMetadata);
 
-                // Extract metadata
-                foreach ($callbackMetadata as $item) {
-                    switch ($item['Name']) {
-                        case 'MpesaReceiptNumber':
-                            $mpesaReceiptNumber = $item['Value'];
-                            break;
-                        case 'TransactionDate':
-                            $transactionDate = $item['Value'];
-                            break;
-                        case 'PhoneNumber':
-                            $phoneNumber = $item['Value'];
-                            break;
-                        case 'Amount':
-                            $amount = $item['Value'];
-                            break;
-                    }
-                }
-
-                // Update payment record
                 $payment->update([
                     'status' => 'completed',
-                    'provider_response' => json_encode($callbackData),
-                    'external_id' => $mpesaReceiptNumber,
-                    'completed_at' => now()
+                    'mpesa_receipt_number' => $paymentDetails['mpesa_receipt'],
+                    'transaction_date' => $paymentDetails['transaction_date'],
+                    'phone_number' => $paymentDetails['phone_number'],
+                    'amount' => $paymentDetails['amount']
                 ]);
+
+                // Generate voucher
+                $voucher = $this->generateVoucher($payment);
+
+                // Send SMS with voucher details
+                $this->sendVoucherSms($payment, $voucher);
 
                 Log::info('Payment completed successfully', [
                     'payment_id' => $payment->id,
-                    'mpesa_receipt' => $mpesaReceiptNumber,
-                    'amount' => $amount,
-                    'phone' => $phoneNumber
+                    'voucher_id' => $voucher->id,
+                    'mpesa_receipt' => $paymentDetails['mpesa_receipt']
                 ]);
 
-                // Complete the voucher purchase
-                $this->mobileMoneyService->completeVoucherPurchase($payment);
-
             } else {
-                // Failed
+                // Payment failed
                 $payment->update([
                     'status' => 'failed',
-                    'provider_response' => json_encode($callbackData),
-                    'failed_at' => now()
+                    'failure_reason' => $resultDesc
                 ]);
 
                 Log::info('Payment failed', [
@@ -121,29 +96,16 @@ class MpesaCallbackController extends Controller
                 ]);
             }
 
-            return response()->json(['ResultCode' => 0, 'ResultDesc' => 'Callback processed successfully']);
+            return response()->json(['ResultCode' => 0, 'ResultDesc' => 'Success']);
 
         } catch (\Exception $e) {
-            Log::error('Error processing M-Pesa callback', [
+            Log::error('Error processing STK callback', [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'request_data' => $request->all()
+                'trace' => $e->getTraceAsString()
             ]);
 
             return response()->json(['ResultCode' => 1, 'ResultDesc' => 'Internal server error']);
         }
-    }
-
-    /**
-     * Handle M-Pesa timeout callback
-     */
-    public function timeoutCallback(Request $request)
-    {
-        Log::info('M-Pesa Timeout Callback received', [
-            'body' => $request->all()
-        ]);
-
-        return response()->json(['ResultCode' => 0, 'ResultDesc' => 'Timeout callback received']);
     }
 
     /**
@@ -154,6 +116,7 @@ class MpesaCallbackController extends Controller
         Log::info('M-Pesa Validation callback received', $request->all());
 
         // For now, accept all transactions
+        // You can add validation logic here if needed
         return response()->json([
             'ResultCode' => 0,
             'ResultDesc' => 'Accepted'
@@ -169,24 +132,29 @@ class MpesaCallbackController extends Controller
 
         try {
             // Process the confirmation data
-            $transactionDetails = [
-                'transaction_type' => $request->input('TransactionType'),
-                'trans_id' => $request->input('TransID'),
-                'trans_time' => $request->input('TransTime'),
-                'trans_amount' => $request->input('TransAmount'),
-                'business_short_code' => $request->input('BusinessShortCode'),
-                'bill_ref_number' => $request->input('BillRefNumber'),
-                'invoice_number' => $request->input('InvoiceNumber'),
-                'org_account_balance' => $request->input('OrgAccountBalance'),
-                'third_party_trans_id' => $request->input('ThirdPartyTransID'),
-                'msisdn' => $request->input('MSISDN'),
-                'first_name' => $request->input('FirstName'),
-                'middle_name' => $request->input('MiddleName'),
-                'last_name' => $request->input('LastName')
-            ];
+            $transactionType = $request->input('TransactionType');
+            $transId = $request->input('TransID');
+            $transTime = $request->input('TransTime');
+            $transAmount = $request->input('TransAmount');
+            $businessShortCode = $request->input('BusinessShortCode');
+            $billRefNumber = $request->input('BillRefNumber');
+            $invoiceNumber = $request->input('InvoiceNumber');
+            $orgAccountBalance = $request->input('OrgAccountBalance');
+            $thirdPartyTransId = $request->input('ThirdPartyTransID');
+            $msisdn = $request->input('MSISDN');
+            $firstName = $request->input('FirstName');
+            $middleName = $request->input('MiddleName');
+            $lastName = $request->input('LastName');
 
             // Log the transaction details
-            Log::info('M-Pesa transaction confirmed', $transactionDetails);
+            Log::info('M-Pesa transaction confirmed', [
+                'trans_id' => $transId,
+                'amount' => $transAmount,
+                'phone' => $msisdn,
+                'reference' => $billRefNumber
+            ]);
+
+            // You can add logic here to handle direct payments to your paybill
 
             return response()->json([
                 'ResultCode' => 0,
@@ -202,6 +170,78 @@ class MpesaCallbackController extends Controller
             return response()->json([
                 'ResultCode' => 1,
                 'ResultDesc' => 'Internal server error'
+            ]);
+        }
+    }
+
+    /**
+     * Extract payment details from callback metadata
+     */
+    private function extractPaymentDetails(array $metadata)
+    {
+        $details = [
+            'amount' => null,
+            'mpesa_receipt' => null,
+            'transaction_date' => null,
+            'phone_number' => null
+        ];
+
+        foreach ($metadata as $item) {
+            switch ($item['Name']) {
+                case 'Amount':
+                    $details['amount'] = $item['Value'];
+                    break;
+                case 'MpesaReceiptNumber':
+                    $details['mpesa_receipt'] = $item['Value'];
+                    break;
+                case 'TransactionDate':
+                    $details['transaction_date'] = $item['Value'];
+                    break;
+                case 'PhoneNumber':
+                    $details['phone_number'] = $item['Value'];
+                    break;
+            }
+        }
+
+        return $details;
+    }
+
+    /**
+     * Generate voucher for successful payment
+     */
+    private function generateVoucher(Payment $payment)
+    {
+        $plan = $payment->plan;
+        
+        $voucher = Voucher::create([
+            'code' => 'V' . strtoupper(uniqid()),
+            'username' => 'user_' . uniqid(),
+            'password' => strtoupper(substr(md5(uniqid()), 0, 8)),
+            'plan_id' => $plan->id,
+            'payment_id' => $payment->id,
+            'expires_at' => now()->addDays($plan->duration_days),
+            'data_limit' => $plan->data_limit,
+            'time_limit' => $plan->time_limit,
+            'status' => 'active'
+        ]);
+
+        return $voucher;
+    }
+
+    /**
+     * Send SMS with voucher details
+     */
+    private function sendVoucherSms(Payment $payment, Voucher $voucher)
+    {
+        $message = "WiFi Voucher: Code: {$voucher->code}, Username: {$voucher->username}, Password: {$voucher->password}. Valid for {$payment->plan->duration_days} days. Enjoy your internet!";
+        
+        try {
+            $this->smsService->send($payment->phone_number, $message);
+            Log::info('Voucher SMS sent successfully', ['payment_id' => $payment->id]);
+        } catch (\Exception $e) {
+            Log::error('Failed to send voucher SMS', [
+                'payment_id' => $payment->id,
+                'error' => $e->getMessage()
             ]);
         }
     }

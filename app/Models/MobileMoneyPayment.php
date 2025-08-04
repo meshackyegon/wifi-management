@@ -46,11 +46,6 @@ class MobileMoneyPayment extends Model
         return $this->belongsTo(Voucher::class);
     }
 
-    public function smsLogs()
-    {
-        return $this->hasManyThrough(SmsLog::class, Voucher::class, 'id', 'voucher_id', 'voucher_id', 'id');
-    }
-
     public function user()
     {
         return $this->belongsTo(User::class, 'phone_number', 'phone');

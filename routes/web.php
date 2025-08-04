@@ -80,10 +80,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     
     // SMS Management
     Route::prefix('sms')->name('sms.')->group(function () {
-        Route::get('/', [App\Http\Controllers\SmsController::class, 'index'])->name('index');
-        Route::post('/send', [App\Http\Controllers\SmsController::class, 'send'])->name('send');
-        Route::get('/logs', [App\Http\Controllers\SmsController::class, 'logs'])->name('logs');
-        Route::post('/resend-voucher/{voucher}', [App\Http\Controllers\SmsController::class, 'resendVoucherSms'])->name('resend-voucher');
+        Volt::route('/', 'sms.index')->name('index');
+        Volt::route('/send', 'sms.send')->name('send');
+        Volt::route('/logs', 'sms.logs')->name('logs');
     });
     
     // Reports (Admin and Agent)

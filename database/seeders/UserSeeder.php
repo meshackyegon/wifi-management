@@ -53,7 +53,6 @@ class UserSeeder extends Seeder
                 'email' => 'admin@wifimanagement.com',
                 'password' => Hash::make('Admin@123'),
                 'phone' => '+256701234567',
-                'user_type' => 'admin',
                 'email_verified_at' => now(),
             ]
         );
@@ -67,7 +66,6 @@ class UserSeeder extends Seeder
                 'email' => 'agent@wifimanagement.com',
                 'password' => Hash::make('Agent@123'),
                 'phone' => '+256702345678',
-                'user_type' => 'agent',
                 'email_verified_at' => now(),
             ]
         );
@@ -81,7 +79,6 @@ class UserSeeder extends Seeder
                 'email' => 'customer@example.com',
                 'password' => Hash::make('Customer@123'),
                 'phone' => '+256703456789',
-                'user_type' => 'customer',
                 'email_verified_at' => now(),
             ]
         );

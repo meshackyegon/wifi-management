@@ -286,32 +286,18 @@
                                             <th>Customer</th>
                                             <th>Plan</th>
                                             <th>Amount</th>
-                                            <th>Voucher Code</th>
                                             <th>Status</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         @foreach(collect($stats['recent_transactions'])->take(5) as $transaction)
                                             <tr>
-                                                <td>{{ \Carbon\Carbon::parse($transaction['created_at'])->format('M d, H:i') }}</td>
+                                                <td>{{ \Carbon\Carbon::parse($transaction['created_at'])->format('M d, Y') }}</td>
+                                                <td>{{ $transaction['customer_name'] ?? 'N/A' }}</td>
+                                                <td>{{ $transaction['plan_name'] ?? 'N/A' }}</td>
+                                                <td><span class="badge bg-success">KES {{ number_format($transaction['amount'] ?? 0) }}</span></td>
                                                 <td>
-                                                    <span class="fw-medium">{{ $transaction['customer_name'] ?? 'N/A' }}</span>
-                                                </td>
-                                                <td>
-                                                    <span class="badge bg-info rounded-pill">{{ $transaction['plan_name'] ?? 'N/A' }}</span>
-                                                </td>
-                                                <td>
-                                                    <span class="badge bg-success">KES {{ number_format($transaction['amount'] ?? 0) }}</span>
-                                                </td>
-                                                <td>
-                                                    @if($transaction['voucher_code'] && $transaction['voucher_code'] !== 'N/A')
-                                                        <code class="text-primary">{{ $transaction['voucher_code'] }}</code>
-                                                    @else
-                                                        <small class="text-muted">-</small>
-                                                    @endif
-                                                </td>
-                                                <td>
-                                                    <span class="badge bg-{{ $transaction['status'] === 'success' ? 'success' : ($transaction['status'] === 'pending' ? 'warning' : 'danger') }} rounded-pill">
+                                                    <span class="badge bg-{{ $transaction['status'] === 'completed' ? 'success' : ($transaction['status'] === 'pending' ? 'warning' : 'danger') }}">
                                                         {{ ucfirst($transaction['status'] ?? 'pending') }}
                                                     </span>
                                                 </td>
@@ -426,7 +412,7 @@
                                 <i class="bi bi-clock-history fs-1 mb-2"></i>
                                 <h5>Purchase History</h5>
                                 <p class="mb-3">View your voucher purchase history</p>
-                                <a href="{{ route('mobile-money.history') }}" class="btn btn-light">
+                                <a href="{{ route('history') }}" class="btn btn-light">
                                     <i class="bi bi-list me-1"></i> View History
                                 </a>
                             </div>
