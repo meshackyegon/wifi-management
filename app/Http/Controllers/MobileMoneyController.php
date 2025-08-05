@@ -44,7 +44,7 @@ class MobileMoneyController extends Controller
         $validator = Validator::make($request->all(), [
             'plan_id' => 'required|exists:voucher_plans,id',
             'phone_number' => 'required|string|min:8|max:15',
-            'provider' => 'required|in:mtn_mobile_money,airtel_money,safaricom_mpesa,vodacom_mpesa,tigo_pesa,orange_money',
+            'provider' => 'required|in:mtn_mobile_money,airtel_money,safaricom_mpesa,vodacom_mpesa,tigo_pesa,orange_money,cash',
             'customer_name' => 'nullable|string|max:255',
             'email' => 'nullable|email|max:255',
             'country' => 'nullable|string|size:2',
@@ -73,6 +73,12 @@ class MobileMoneyController extends Controller
         }
 
         try {
+            // Handle cash payment
+            if ($request->provider === 'cash') {
+                return $this->initiateCashPayment($plan, $request->phone_number, $request->customer_name);
+            }
+
+            // Handle mobile money payment
             $result = $this->mobileMoneyService->initiatePayment(
                 $plan,
                 $request->phone_number,
@@ -366,5 +372,125 @@ class MobileMoneyController extends Controller
         };
 
         return response()->stream($callback, 200, $headers);
+    }
+
+    /**
+     * Initiate cash payment
+     */
+    private function initiateCashPayment($plan, $phoneNumber, $customerName = null)
+    {
+        // Create pending cash payment record
+        $payment = MobileMoneyPayment::create([
+            'transaction_id' => 'CASH_' . time() . '_' . strtoupper(substr(md5(uniqid()), 0, 6)),
+            'voucher_plan_id' => $plan->id,
+            'phone_number' => $phoneNumber,
+            'amount' => $plan->price,
+            'commission' => $plan->price * (config('mobile_money.service_fee', 3.0) / 100),
+            'provider' => 'cash',
+            'payment_method' => 'cash',
+            'status' => 'pending_cash',
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'payment_id' => $payment->id,
+            'transaction_id' => $payment->transaction_id,
+            'amount' => $plan->price,
+            'message' => 'Cash payment initiated. Please visit our location to complete payment.',
+            'payment_type' => 'cash',
+            'instructions' => 'Please bring this transaction ID: ' . $payment->transaction_id . ' when visiting our location.',
+        ]);
+    }
+
+    /**
+     * Complete cash payment (for admin/agent use)
+     */
+    public function completeCashPayment(Request $request, $paymentId)
+    {
+        $validator = Validator::make($request->all(), [
+            'amount_received' => 'required|numeric|min:0',
+            'notes' => 'nullable|string|max:500',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid input data',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $payment = MobileMoneyPayment::where('id', $paymentId)
+            ->where('payment_method', 'cash')
+            ->where('status', 'pending_cash')
+            ->firstOrFail();
+
+        if ($request->amount_received < $payment->amount) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Amount received is less than required payment amount.',
+            ], 400);
+        }
+
+        try {
+            // Mark payment as received
+            $payment->markAsCashReceived(
+                auth()->id(),
+                $request->amount_received,
+                $request->notes
+            );
+
+            // Generate voucher
+            $voucher = $this->mobileMoneyService->generateVoucher($payment);
+            
+            if ($voucher) {
+                $payment->update(['voucher_id' => $voucher->id]);
+                
+                // Send SMS notification
+                $this->mobileMoneyService->sendVoucherSms($payment, $voucher);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Cash payment completed successfully',
+                'voucher_code' => $voucher?->code,
+                'change_given' => $payment->change_given,
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Cash payment completion error', [
+                'payment_id' => $paymentId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to complete cash payment. Please try again.',
+            ], 500);
+        }
+    }
+
+    /**
+     * Show cash payments management page
+     */
+    public function showCashPayments(Request $request)
+    {
+        $query = MobileMoneyPayment::where('payment_method', 'cash')
+            ->with(['voucherPlan', 'voucher', 'cashReceiver'])
+            ->orderBy('created_at', 'desc');
+
+        if ($request->has('status')) {
+            $query->where('status', $request->status);
+        }
+
+        $payments = $query->paginate(20);
+
+        $stats = [
+            'pending' => MobileMoneyPayment::where('payment_method', 'cash')->where('status', 'pending_cash')->count(),
+            'completed' => MobileMoneyPayment::where('payment_method', 'cash')->where('status', 'success')->count(),
+            'total_amount' => MobileMoneyPayment::where('payment_method', 'cash')->where('status', 'success')->sum('amount'),
+        ];
+
+        return view('mobile-money.cash-payments', compact('payments', 'stats'));
     }
 }

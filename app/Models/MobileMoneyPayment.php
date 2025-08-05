@@ -18,6 +18,12 @@ class MobileMoneyPayment extends Model
         'amount',
         'commission',
         'provider',
+        'payment_method',
+        'cash_received_by',
+        'cash_amount_received',
+        'change_given',
+        'payment_notes',
+        'cash_received_at',
         'status',
         'callback_response',
         'reference_number',
@@ -29,7 +35,10 @@ class MobileMoneyPayment extends Model
     protected $casts = [
         'amount' => 'decimal:2',
         'commission' => 'decimal:2',
+        'cash_amount_received' => 'decimal:2',
+        'change_given' => 'decimal:2',
         'paid_at' => 'datetime',
+        'cash_received_at' => 'datetime',
         'callback_response' => 'array',
     ];
 
@@ -133,6 +142,51 @@ class MobileMoneyPayment extends Model
             'status' => 'failed',
             'failure_reason' => $reason,
             'retry_count' => $this->retry_count + 1,
+        ]);
+
+        return $this;
+    }
+
+    /**
+     * Check if payment is cash payment
+     */
+    public function isCashPayment()
+    {
+        return $this->payment_method === 'cash';
+    }
+
+    /**
+     * Check if payment is mobile money payment
+     */
+    public function isMobileMoneyPayment()
+    {
+        return $this->payment_method === 'mobile_money';
+    }
+
+    /**
+     * Get the user who received cash payment
+     */
+    public function cashReceiver()
+    {
+        return $this->belongsTo(User::class, 'cash_received_by');
+    }
+
+    /**
+     * Mark as cash payment received
+     */
+    public function markAsCashReceived($receivedBy, $amountReceived, $notes = null)
+    {
+        $changeGiven = max(0, $amountReceived - $this->amount);
+        
+        $this->update([
+            'payment_method' => 'cash',
+            'status' => 'success',
+            'cash_received_by' => $receivedBy,
+            'cash_amount_received' => $amountReceived,
+            'change_given' => $changeGiven,
+            'payment_notes' => $notes,
+            'cash_received_at' => now(),
+            'paid_at' => now(),
         ]);
 
         return $this;

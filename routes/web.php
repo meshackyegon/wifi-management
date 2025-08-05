@@ -40,6 +40,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('/retry/{payment}', [MobileMoneyController::class, 'retryPayment'])->name('retry');
         Route::get('/stats', [MobileMoneyController::class, 'getPaymentStats'])->name('stats');
         Route::get('/export', [MobileMoneyController::class, 'exportPayments'])->name('export');
+        
+        // Cash payment management
+        Route::get('/cash-payments', [MobileMoneyController::class, 'showCashPayments'])->name('cash-payments');
+        Route::post('/cash-payments/{payment}/complete', [MobileMoneyController::class, 'completeCashPayment'])->name('cash-payments.complete');
     });
     
     // Voucher Management

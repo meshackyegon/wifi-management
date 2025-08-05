@@ -131,6 +131,9 @@
             <li class="menu-item {{ request()->routeIs('mobile-money.history') ? 'active' : '' }}">
               <a class="menu-link" href="{{ route('mobile-money.history') }}" wire:navigate>{{ __('All Payments') }}</a>
             </li>
+            <li class="menu-item {{ request()->routeIs('mobile-money.cash-payments') ? 'active' : '' }}">
+              <a class="menu-link" href="{{ route('mobile-money.cash-payments') }}" wire:navigate>{{ __('Cash Payments') }}</a>
+            </li>
             <li class="menu-item {{ request()->routeIs('mobile-money.stats') ? 'active' : '' }}">
               <a class="menu-link" href="#" onclick="loadPaymentStats()">{{ __('Statistics') }}</a>
             </li>

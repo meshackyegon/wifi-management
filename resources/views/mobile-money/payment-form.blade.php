@@ -205,6 +205,15 @@ body {
             <div class="provider-options" id="providerOptions">
                 <h6 style="margin-bottom: 1rem; color: #333;">Select Payment Method:</h6>
                 
+                <!-- Cash Payment Option (Always Visible) -->
+                <button type="button" class="provider-btn" data-provider="cash">
+                    <span>
+                        <strong>💰 Cash Payment</strong><br>
+                        <small>Pay with cash at our location</small>
+                    </span>
+                    <span style="color: #28a745; font-size: 1.2rem;">💵</span>
+                </button>
+                
                 <!-- Kenya Providers -->
                 <div class="kenya-providers" style="display: none;">
                     <button type="button" class="provider-btn" data-provider="safaricom_mpesa">
@@ -352,6 +361,18 @@ document.addEventListener('click', function(e) {
         btn.classList.add('selected');
         selectedProvider = btn.getAttribute('data-provider');
         document.getElementById('selectedProvider').value = selectedProvider;
+        
+        // Handle cash payments - hide phone input
+        const phoneInputGroup = document.getElementById('phoneInputGroup');
+        if (selectedProvider === 'cash') {
+            phoneInputGroup.style.display = 'none';
+            // Set a default phone number for cash payments
+            document.getElementById('phone_number').value = '+254700000000';
+        } else {
+            phoneInputGroup.style.display = 'flex';
+            document.getElementById('phone_number').value = '';
+        }
+        
         updatePayButton();
     }
 });
@@ -379,10 +400,6 @@ document.getElementById('paymentForm').addEventListener('submit', function(e) {
     e.preventDefault();
     
     // Validate all required fields
-    if (!selectedCountry) {
-        alert('Please select a country');
-        return;
-    }
     if (!selectedPlan) {
         alert('Please select a package');
         return;
@@ -392,25 +409,33 @@ document.getElementById('paymentForm').addEventListener('submit', function(e) {
         return;
     }
     
-    const phoneNumber = document.getElementById('phone_number').value;
-    if (!phoneNumber) {
-        alert('Please enter your phone number');
-        return;
-    }
-    
-    // Clean and format phone number
-    let cleanPhone = phoneNumber.replace(/\s+/g, '').replace(/[^\d+]/g, '');
-    if (!cleanPhone.startsWith('+')) {
-        const countryInfo = countryData[selectedCountry];
-        if (countryInfo && cleanPhone.startsWith('0')) {
-            cleanPhone = countryInfo.code + cleanPhone.substring(1);
-        } else if (countryInfo) {
-            cleanPhone = countryInfo.code + cleanPhone;
+    // For mobile money payments, validate country and phone
+    if (selectedProvider !== 'cash') {
+        if (!selectedCountry) {
+            alert('Please select a country');
+            return;
         }
+        
+        const phoneNumber = document.getElementById('phone_number').value;
+        if (!phoneNumber) {
+            alert('Please enter your phone number');
+            return;
+        }
+        
+        // Clean and format phone number
+        let cleanPhone = phoneNumber.replace(/\s+/g, '').replace(/[^\d+]/g, '');
+        if (!cleanPhone.startsWith('+')) {
+            const countryInfo = countryData[selectedCountry];
+            if (countryInfo && cleanPhone.startsWith('0')) {
+                cleanPhone = countryInfo.code + cleanPhone.substring(1);
+            } else if (countryInfo) {
+                cleanPhone = countryInfo.code + cleanPhone;
+            }
+        }
+        
+        // Update the form field with cleaned phone number
+        document.getElementById('phone_number').value = cleanPhone;
     }
-    
-    // Update the form field with cleaned phone number
-    document.getElementById('phone_number').value = cleanPhone;
     
     const payBtn = document.getElementById('payNowBtn');
     const modal = new bootstrap.Modal(document.getElementById('paymentModal'));
@@ -448,18 +473,37 @@ document.getElementById('paymentForm').addEventListener('submit', function(e) {
     .then(data => {
         console.log('Parsed response:', data);
         if (data.success) {
-            // Update modal content
-            document.getElementById('paymentStatus').innerHTML = `
-                <i class="fas fa-check-circle text-success fa-3x mb-3"></i>
-                <h6>Payment Initiated Successfully!</h6>
-                <p class="text-muted">Please check your phone and approve the payment request.</p>
-                <p class="text-muted">Transaction ID: <strong>${data.transaction_id}</strong></p>
-                <div class="mt-3">
-                    <button type="button" class="btn btn-primary" onclick="checkPaymentStatus('${data.transaction_id}')">
-                        Check Status
-                    </button>
-                </div>
-            `;
+            // Handle cash payment differently
+            if (data.payment_type === 'cash') {
+                document.getElementById('paymentStatus').innerHTML = `
+                    <i class="fas fa-money-bill-wave text-success fa-3x mb-3"></i>
+                    <h6>Cash Payment Request Created!</h6>
+                    <p class="text-muted">${data.message}</p>
+                    <div class="alert alert-info mt-3">
+                        <strong>Transaction ID:</strong> ${data.transaction_id}<br>
+                        <strong>Amount to Pay:</strong> KES ${data.amount}<br>
+                        <strong>Instructions:</strong> ${data.instructions}
+                    </div>
+                    <div class="mt-3">
+                        <button type="button" class="btn btn-success" onclick="window.location.reload()">
+                            Continue
+                        </button>
+                    </div>
+                `;
+            } else {
+                // Handle mobile money payment
+                document.getElementById('paymentStatus').innerHTML = `
+                    <i class="fas fa-check-circle text-success fa-3x mb-3"></i>
+                    <h6>Payment Initiated Successfully!</h6>
+                    <p class="text-muted">Please check your phone and approve the payment request.</p>
+                    <p class="text-muted">Transaction ID: <strong>${data.transaction_id}</strong></p>
+                    <div class="mt-3">
+                        <button type="button" class="btn btn-primary" onclick="checkPaymentStatus('${data.transaction_id}')">
+                            Check Status
+                        </button>
+                    </div>
+                `;
+            }
         } else {
             // Show error
             let errorMessage = data.message || 'Payment failed';
