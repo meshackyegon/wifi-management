@@ -54,7 +54,7 @@ new class extends Component {
 
         session()->flash('success', 'Voucher plan updated successfully.');
         
-        return redirect()->route('admin.voucher-plans.index');
+        return redirect()->route('voucher-plans.index');
     }
 }; ?>
 
@@ -114,7 +114,7 @@ new class extends Component {
                         </div>
 
                         <div class="flex justify-end space-x-3 mt-6">
-                            <a href="{{ route('admin.voucher-plans.index') }}" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded">
+                            <a href="{{ route('voucher-plans.index') }}" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded">
                                 Cancel
                             </a>
                             <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">

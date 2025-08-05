@@ -7,7 +7,7 @@ use App\Http\Controllers\MobileMoneyController;
 use App\Http\Controllers\VoucherController;
 
 Route::get('/', function () {
-  return view('welcome');
+  return redirect()->route('voucher.buy');
 })->name('home');
 
 // Public voucher purchase routes
@@ -19,6 +19,7 @@ Route::prefix('mobile-money')->name('mobile-money.')->group(function () {
     Route::post('/initiate', [MobileMoneyController::class, 'initiatePayment'])->name('initiate');
     Route::post('/check-status', [MobileMoneyController::class, 'checkPaymentStatus'])->name('check-status');
     Route::post('/callback/{provider}', [MobileMoneyController::class, 'handleCallback'])->name('callback');
+    Route::post('/cash-payment', [MobileMoneyController::class, 'processCashPayment'])->name('cash-payment');
 });
 
 // M-Pesa Callback Routes (for NGrok)
@@ -41,9 +42,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/stats', [MobileMoneyController::class, 'getPaymentStats'])->name('stats');
         Route::get('/export', [MobileMoneyController::class, 'exportPayments'])->name('export');
         
-        // Cash payment management
-        Route::get('/cash-payments', [MobileMoneyController::class, 'showCashPayments'])->name('cash-payments');
-        Route::post('/cash-payments/{payment}/complete', [MobileMoneyController::class, 'completeCashPayment'])->name('cash-payments.complete');
+        // Cash Payment Management (Admin only)
+        Route::middleware(['role:admin'])->group(function () {
+            Route::get('/cash-payments', [MobileMoneyController::class, 'cashPayments'])->name('cash-payments');
+            Route::post('/cash-payments/{payment}/approve', [MobileMoneyController::class, 'approveCashPayment'])->name('approve-cash');
+            Route::post('/cash-payments/{payment}/reject', [MobileMoneyController::class, 'rejectCashPayment'])->name('reject-cash');
+        });
     });
     
     // Voucher Management

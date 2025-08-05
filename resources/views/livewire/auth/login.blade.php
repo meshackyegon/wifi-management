@@ -113,23 +113,9 @@ new #[Layout('components.layouts.auth')] class extends Component {
             <div class="d-flex justify-content-between">
                 <label for="password" class="form-label">{{ __('Password') }}</label>
                 @if (Route::has('password.request'))
-                    <div class="dropdown">
-                        <a href="#" class="dropdown-toggle text-decoration-none" data-bs-toggle="dropdown" aria-expanded="false">
-                            <span>{{ __('Forgot Password?') }}</span>
-                        </a>
-                        <ul class="dropdown-menu">
-                            <li>
-                                <a class="dropdown-item" href="{{ route('password.request') }}" wire:navigate>
-                                    <i class="fas fa-envelope me-2"></i>{{ __('Reset via Email') }}
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item" href="{{ route('password.sms.request') }}">
-                                    <i class="fas fa-sms me-2"></i>{{ __('Reset via SMS') }}
-                                </a>
-                            </li>
-                        </ul>
-                    </div>
+                    <a href="{{ route('password.request') }}" wire:navigate>
+                        <span>{{ __('Forgot Password?') }}</span>
+                    </a>
                 @endif
             </div>
             <div class="input-group input-group-merge">

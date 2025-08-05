@@ -36,7 +36,7 @@ new class extends Component {
                 <div class="p-6 text-gray-900">
                     <div class="flex justify-between items-center mb-6">
                         <h3 class="text-lg font-medium">Manage Routers</h3>
-                        <a href="{{ route('admin.routers.create') }}" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                        <a href="{{ route('routers.create') }}" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
                             Add New Router
                         </a>
                     </div>
@@ -75,8 +75,8 @@ new class extends Component {
                                         </td>
                                         <td class="py-2 px-4 border-b">
                                             <div class="flex space-x-2">
-                                                <a href="{{ route('admin.routers.test', $router) }}" class="text-green-600 hover:text-green-900">Test</a>
-                                                <a href="{{ route('admin.routers.edit', $router) }}" class="text-blue-600 hover:text-blue-900">Edit</a>
+                                                <a href="{{ route('routers.test', $router) }}" class="text-green-600 hover:text-green-900">Test</a>
+                                                <a href="{{ route('routers.edit', $router) }}" class="text-blue-600 hover:text-blue-900">Edit</a>
                                                 <button wire:click="delete({{ $router->id }})" wire:confirm="Are you sure you want to delete this router?" class="text-red-600 hover:text-red-900">Delete</button>
                                             </div>
                                         </td>
@@ -84,7 +84,7 @@ new class extends Component {
                                 @empty
                                     <tr>
                                         <td colspan="6" class="py-4 px-4 text-center text-gray-500">
-                                            No routers found. <a href="{{ route('admin.routers.create') }}" class="text-blue-600">Add one now</a>.
+                                            No routers found. <a href="{{ route('routers.create') }}" class="text-blue-600">Add one now</a>.
                                         </td>
                                     </tr>
                                 @endforelse

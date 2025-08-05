@@ -41,7 +41,7 @@ new class extends Component {
 
         session()->flash('success', 'Router added successfully.');
         
-        return redirect()->route('admin.routers.index');
+        return redirect()->route('routers.index');
     }
 }; ?>
 
@@ -101,7 +101,7 @@ new class extends Component {
                         </div>
 
                         <div class="flex justify-end space-x-3 mt-6">
-                            <a href="{{ route('admin.routers.index') }}" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded">
+                            <a href="{{ route('routers.index') }}" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded">
                                 Cancel
                             </a>
                             <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">

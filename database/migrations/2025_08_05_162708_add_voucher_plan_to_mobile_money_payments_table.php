@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('mobile_money_payments', function (Blueprint $table) {
-            //
+            $table->string('voucher_plan')->nullable()->after('voucher_plan_id');
         });
     }
 
@@ -22,7 +22,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('mobile_money_payments', function (Blueprint $table) {
-            //
+            $table->dropColumn('voucher_plan');
         });
     }
 };

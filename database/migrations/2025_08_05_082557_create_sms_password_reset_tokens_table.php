@@ -13,15 +13,7 @@ return new class extends Migration
     {
         Schema::create('sms_password_reset_tokens', function (Blueprint $table) {
             $table->id();
-            $table->string('phone');
-            $table->string('token');
-            $table->string('password'); // Temporary password
-            $table->timestamp('expires_at');
-            $table->timestamp('used_at')->nullable();
             $table->timestamps();
-            
-            $table->index(['phone', 'token']);
-            $table->index('expires_at');
         });
     }
 

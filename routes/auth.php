@@ -1,6 +1,5 @@
 <?php
 
-use App\Http\Controllers\Auth\SmsPasswordResetController;
 use App\Http\Controllers\Auth\VerifyEmailController;
 use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
@@ -18,18 +17,6 @@ Route::middleware('guest')->group(function () {
     Volt::route('reset-password/{token}', 'auth.reset-password')
         ->name('password.reset');
 
-    // SMS Password Reset Routes
-    Route::get('forgot-password-sms', [SmsPasswordResetController::class, 'showRequestForm'])
-        ->name('password.sms.request');
-    
-    Route::post('forgot-password-sms', [SmsPasswordResetController::class, 'sendResetSms'])
-        ->name('password.sms.send');
-    
-    Route::get('reset-password-sms', [SmsPasswordResetController::class, 'showResetForm'])
-        ->name('password.sms.reset.form');
-    
-    Route::post('reset-password-sms', [SmsPasswordResetController::class, 'resetPassword'])
-        ->name('password.sms.reset');
 });
 
 Route::middleware('auth')->group(function () {

@@ -85,12 +85,12 @@
           <span class="menu-header-text">Administration</span>
         </li>
         
-        <li class="menu-item {{ request()->is('analytics') ? 'active' : '' }}">
+        <!-- <li class="menu-item {{ request()->is('analytics') ? 'active' : '' }}">
           <a class="menu-link" href="{{ route('analytics') }}">
             <i class="menu-icon tf-icons bx bx-line-chart"></i>
             <div class="text-truncate">{{ __('Analytics') }}</div>
           </a>
-        </li>
+        </li> -->
         
         <li class="menu-item {{ request()->is('vouchers*') && !request()->is('voucher-plans*') ? 'active open' : '' }}">
           <a href="javascript:void(0);" class="menu-link menu-toggle">
@@ -130,9 +130,6 @@
           <ul class="menu-sub">
             <li class="menu-item {{ request()->routeIs('mobile-money.history') ? 'active' : '' }}">
               <a class="menu-link" href="{{ route('mobile-money.history') }}" wire:navigate>{{ __('All Payments') }}</a>
-            </li>
-            <li class="menu-item {{ request()->routeIs('mobile-money.cash-payments') ? 'active' : '' }}">
-              <a class="menu-link" href="{{ route('mobile-money.cash-payments') }}" wire:navigate>{{ __('Cash Payments') }}</a>
             </li>
             <li class="menu-item {{ request()->routeIs('mobile-money.stats') ? 'active' : '' }}">
               <a class="menu-link" href="#" onclick="loadPaymentStats()">{{ __('Statistics') }}</a>
