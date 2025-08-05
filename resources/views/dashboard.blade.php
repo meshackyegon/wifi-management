@@ -412,7 +412,7 @@
                                 <i class="bi bi-clock-history fs-1 mb-2"></i>
                                 <h5>Purchase History</h5>
                                 <p class="mb-3">View your voucher purchase history</p>
-                                <a href="{{ route('history') }}" class="btn btn-light">
+                                <a href="{{ route('mobile-money.history') }}" class="btn btn-light">
                                     <i class="bi bi-list me-1"></i> View History
                                 </a>
                             </div>

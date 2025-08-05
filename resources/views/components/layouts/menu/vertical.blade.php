@@ -85,12 +85,12 @@
           <span class="menu-header-text">Administration</span>
         </li>
         
-        <!-- <li class="menu-item {{ request()->is('analytics') ? 'active' : '' }}">
+        <li class="menu-item {{ request()->is('analytics') ? 'active' : '' }}">
           <a class="menu-link" href="{{ route('analytics') }}">
             <i class="menu-icon tf-icons bx bx-line-chart"></i>
             <div class="text-truncate">{{ __('Analytics') }}</div>
           </a>
-        </li> -->
+        </li>
         
         <li class="menu-item {{ request()->is('vouchers*') && !request()->is('voucher-plans*') ? 'active open' : '' }}">
           <a href="javascript:void(0);" class="menu-link menu-toggle">
