@@ -133,6 +133,220 @@ php artisan db:seed --class=UserSeeder
 php artisan db:seed --class=VoucherPlanSeeder
 ```
 
+## Router Configuration
+
+The system supports multiple WiFi routers (currently optimized for MikroTik) with centralized management.
+
+### Supported Router Types
+- **MikroTik RouterOS** (Primary support)
+- **UBNT UniFi** (Basic support)
+- **TP-Link** (Basic support)
+- **OpenWrt** (Basic support)
+
+### MikroTik Router Setup
+
+#### 1. Enable API Access
+```bash
+# Connect to your MikroTik router via SSH or Winbox
+/ip service enable api
+/ip service set api port=8728
+```
+
+#### 2. Create API User
+```bash
+# Create dedicated user for API access
+/user add name=api-user password=your-secure-password group=full
+```
+
+#### 3. Configure Hotspot
+```bash
+# Set up basic hotspot (if not already configured)
+/ip hotspot setup
+# Follow the wizard or configure manually:
+/ip hotspot add name=hotspot1 interface=bridge
+/ip hotspot profile add name=hsprof1 hotspot-address=192.168.1.1
+```
+
+#### 4. Configure Walled Garden (Optional)
+```bash
+# Allow access to payment gateway without authentication
+/ip hotspot walled-garden add dst-host=*.safaricom.co.ke
+/ip hotspot walled-garden add dst-host=*.jambo-pay.com
+/ip hotspot walled-garden add dst-host=your-domain.com
+```
+
+### Adding Routers to System
+
+1. **Login as Admin** to the WiFi Management System
+2. **Navigate to Routers** → **Add New Router**
+3. **Fill Router Details:**
+   ```
+   Name: Main Reception Router
+   Location: Reception Area - Ground Floor
+   IP Address: 192.168.1.1
+   API Username: api-user
+   API Password: your-secure-password
+   API Port: 8728
+   Type: mikrotik
+   Max Concurrent Users: 50
+   ```
+
+4. **Configure Advanced Settings:**
+   - **Redirect URL**: `http://192.168.1.1/login`
+   - **Block Social Media**: Enable/Disable
+   - **Block Streaming**: Enable/Disable
+   - **Prevent Hotspot Sharing**: Enable/Disable
+
+5. **Test Connection** using the "Test Connection" button
+
+### Router API Endpoints
+
+The system communicates with routers using their respective APIs:
+
+- **MikroTik**: RouterOS API (Port 8728)
+- **UniFi**: UniFi Controller API (Port 8443)
+- **TP-Link**: Omada Controller API (Port 8088)
+
+### Router Management Features
+
+- **Real-time Monitoring**: Check router status and connectivity
+- **User Management**: Add/remove/monitor connected users
+- **Bandwidth Control**: Set upload/download limits per user
+- **Session Management**: View active sessions and usage statistics
+- **Remote Configuration**: Update router settings remotely
+
+### Example Router Configurations
+
+#### MikroTik HotSpot Profile
+```bash
+/ip hotspot profile
+add dns-name=wifi.local hotspot-address=192.168.1.1 html-directory=hotspot \
+    http-cookie-lifetime=3d http-proxy=0.0.0.0:0 login-by=cookie,http-chap \
+    name=hsprof1 rate-limit="" smtp-server=0.0.0.0 split-user-domain=no \
+    use-radius=no
+```
+
+#### User Profile with Bandwidth Limits
+```bash
+/ip hotspot user profile
+add idle-timeout=none keepalive-timeout=2m name=1hour-200mb \
+    rate-limit=512k/2M shared-users=1 status-autorefresh=1m \
+    transparent-proxy=no
+```
+
+## Email Configuration
+
+Configure email for password reset and system notifications.
+
+### SMTP Configuration
+
+Add these settings to your `.env` file:
+
+```env
+# Email Configuration
+MAIL_MAILER=smtp
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USERNAME=your-email@gmail.com
+MAIL_PASSWORD=your-app-password
+MAIL_ENCRYPTION=tls
+MAIL_FROM_ADDRESS="noreply@yourwificompany.com"
+MAIL_FROM_NAME="WiFi Management System"
+```
+
+### Popular Email Providers
+
+#### Gmail Setup
+1. **Enable 2-Factor Authentication** on your Google account
+2. **Generate App Password**:
+   - Go to Google Account Settings
+   - Security → 2-Step Verification → App passwords
+   - Generate password for "Mail"
+3. **Update .env**:
+   ```env
+   MAIL_HOST=smtp.gmail.com
+   MAIL_PORT=587
+   MAIL_USERNAME=your-email@gmail.com
+   MAIL_PASSWORD=your-16-character-app-password
+   MAIL_ENCRYPTION=tls
+   ```
+
+#### Microsoft Outlook/Hotmail
+```env
+MAIL_HOST=smtp-mail.outlook.com
+MAIL_PORT=587
+MAIL_USERNAME=your-email@outlook.com
+MAIL_PASSWORD=your-password
+MAIL_ENCRYPTION=starttls
+```
+
+#### Custom SMTP Server
+```env
+MAIL_HOST=mail.yourdomain.com
+MAIL_PORT=587
+MAIL_USERNAME=noreply@yourdomain.com
+MAIL_PASSWORD=your-email-password
+MAIL_ENCRYPTION=tls
+```
+
+### Testing Email Configuration
+
+Run this command to test email sending:
+
+```bash
+# Test email configuration
+php artisan tinker
+
+# In Tinker, run:
+Mail::raw('Test email from WiFi Management System', function ($message) {
+    $message->to('test@example.com')->subject('Test Email');
+});
+```
+
+### Password Reset Email Template
+
+The system automatically sends styled password reset emails. To customize:
+
+1. **Publish email templates**:
+   ```bash
+   php artisan vendor:publish --tag=laravel-notifications
+   ```
+
+2. **Edit template**: `resources/views/notifications/reset-password.blade.php`
+
+### Email Queue Configuration (Recommended)
+
+For better performance, use email queues:
+
+```env
+# In .env
+QUEUE_CONNECTION=database
+```
+
+```bash
+# Run queue worker
+php artisan queue:work
+```
+
+### Forgot Password Flow
+
+1. **User clicks** "Forgot Password" on login page
+2. **System sends** email with reset link (valid for 60 minutes)
+3. **User clicks** link in email
+4. **User enters** new password
+5. **Password updated** and user can login
+
+### Email Logs and Debugging
+
+Check email logs:
+```bash
+# View Laravel logs
+tail -f storage/logs/laravel.log
+
+# Test with log driver (for development)
+MAIL_MAILER=log
+```
+
 ## Production Deployment
 
 1. Set `APP_ENV=production` in `.env`
@@ -140,6 +354,41 @@ php artisan db:seed --class=VoucherPlanSeeder
 3. Configure real SMS provider credentials
 4. Set up proper SSL certificates
 5. Configure database for production
+6. Set up email server (SMTP) for password resets
+7. Configure routers with production API credentials
+8. Set up queue workers for email processing
+
+## Troubleshooting
+
+### Common Router Issues
+
+- **Connection Failed**: Check IP address, API port, and credentials
+- **API Disabled**: Enable API service on router
+- **Wrong Credentials**: Verify username/password
+- **Firewall Blocking**: Allow API port in router firewall
+
+### Common Email Issues
+
+- **Email Not Sending**: Check SMTP credentials and network connectivity
+- **Gmail Authentication**: Use App Password, not regular password
+- **Rate Limiting**: Some providers limit emails per hour
+- **SSL/TLS Errors**: Try different encryption settings
+
+### Debug Commands
+
+```bash
+# Clear all caches
+php artisan optimize:clear
+
+# Test router connection
+php artisan router:test {router-id}
+
+# Test email sending
+php artisan email:test your-email@domain.com
+
+# Check queue status
+php artisan queue:failed
+```
 
 ## Support
 

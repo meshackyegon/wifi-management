@@ -43,16 +43,22 @@ class MobileMoneyController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'plan_id' => 'required|exists:voucher_plans,id',
-            'phone_number' => 'required|string|regex:/^\+?[1-9]\d{1,14}$/',
+            'phone_number' => 'required|string|min:8|max:15',
             'provider' => 'required|in:mtn_mobile_money,airtel_money,safaricom_mpesa,vodacom_mpesa,tigo_pesa,orange_money',
-            'customer_name' => 'required|string|max:255',
+            'customer_name' => 'nullable|string|max:255',
             'email' => 'nullable|email|max:255',
+            'country' => 'nullable|string|size:2',
         ]);
 
         if ($validator->fails()) {
+            Log::warning('Payment validation failed', [
+                'errors' => $validator->errors(),
+                'input' => $request->all()
+            ]);
+            
             return response()->json([
                 'success' => false,
-                'message' => 'Invalid input data',
+                'message' => 'Invalid input data: ' . $validator->errors()->first(),
                 'errors' => $validator->errors(),
             ], 422);
         }
