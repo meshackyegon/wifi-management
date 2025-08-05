@@ -59,10 +59,17 @@ new #[Layout('components.layouts.auth')] class extends Component {
             @enderror
         </div>
 
-        <button type="submit" class="btn btn-primary d-grid w-100 mb-6">
+        <button type="submit" class="btn btn-primary d-grid w-100 mb-4">
             {{ __('Send Reset Link') }}
         </button>
     </form>
+
+    <div class="text-center mb-4">
+        <div class="divider divider-text">or</div>
+        <a href="{{ route('password.sms.request') }}" class="btn btn-outline-primary d-grid w-100">
+            <i class="fas fa-sms me-2"></i>{{ __('Reset via SMS instead') }}
+        </a>
+    </div>
 
     <div class="text-center">
         <a href="{{ route('login') }}" class="d-flex justify-content-center" wire:navigate>
